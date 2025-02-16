@@ -30,7 +30,6 @@
 #error "Zigbee end device mode is not selected in Tools->Zigbee mode"
 #endif
 
-#include <zigbee/CustomZigbeeCore.h>
 #include <ZigbeeShade.h>
 
 /* Zigbee shade configuration */
@@ -42,8 +41,14 @@ const int backwardPin = D1;
 const int upButtonPin = D6;
 const int downButtonPin = D5;
 const int LdrPin = D2;
+const int batteryPin = A0;
 
 const int MS_PER_TILT_PERC_CHANGE = 100;
+
+// battery settings
+const unsigned long reportInterval = 10 * 1000;  // 1 * 60 * 60 * 1000; // 1 hour in milliseconds
+unsigned long lastReportTime = 0;
+uint8_t lastReportedBattery = 100;  // Store last reported battery percentage
 
 ZigbeeShade zbShade = ZigbeeShade(ZIGBEE_SHADE_ENDPOINT);
 
@@ -71,22 +76,6 @@ void shadeStop() {
   blink(2);
 }
 
-// void onTiltChange(int16_t tilt_perc_change) {
-//   Serial.printf("cb tilt change: %d\n", tilt_perc_change);
-
-//   if (tilt_perc_change > 0) {
-//     digitalWrite(forwardPin, HIGH);
-//     Serial.printf("forward for %d ms\n", 100 * tilt_perc_change);
-//     delay(msPerTiltPerc * tilt_perc_change);
-//     digitalWrite(forwardPin, LOW);
-//   } else {
-//     digitalWrite(backwardPin, HIGH);
-//     Serial.printf("backward for %d ms\n", 100 * -tilt_perc_change);
-//     delay(msPerTiltPerc * -tilt_perc_change);
-//     digitalWrite(backwardPin, LOW);
-//   }
-// }
-
 void motorForward() {
   digitalWrite(forwardPin, HIGH);
 }
@@ -98,6 +87,39 @@ void motorBackward() {
 void motorStop() {
   digitalWrite(forwardPin, LOW);
   digitalWrite(backwardPin, LOW);
+}
+
+void measureAndReportBattery() {
+  uint32_t Vbatt = 0;
+  for (int i = 0; i < 16; i++) {
+    Vbatt = Vbatt + analogReadMilliVolts(batteryPin);  // ADC with correction
+  }
+  float Vbattf = 2 * Vbatt / 16 / 1000.0;  // attenuation ratio 1/2, mV --> V
+
+  // Define min and max voltage of battery
+  const float Vmin = 3.0;  // Minimum battery voltage
+  const float Vmax = 4.2;  // Maximum battery voltage
+
+  // Convert voltage to percentage
+  float batteryPercentage = ((Vbattf - Vmin) / (Vmax - Vmin)) * 100.0;
+
+  // Constrain the value between 0% and 100%
+  batteryPercentage = constrain(batteryPercentage, 0, 100);
+  uint8_t batteryPercentageUint8 = static_cast<uint8_t>(batteryPercentage);
+
+  if (abs(lastReportedBattery - batteryPercentageUint8) >= 1) {  // Only report if changed by 1%
+    Serial.print("Battery Voltage: ");
+    Serial.print(Vbattf, 3);
+    Serial.print(" V, Battery Percentage: ");
+    Serial.print(batteryPercentage);
+    Serial.println(" %");
+
+    // Send battery percentage over Zigbee network here
+    zbShade.setBatteryPercentage(batteryPercentageUint8);
+    zbShade.reportBatteryPercentage();
+
+    lastReportedBattery = batteryPercentageUint8;
+  }
 }
 
 /********************* Arduino functions **************************/
@@ -117,10 +139,15 @@ void setup() {
   pinMode(upButtonPin, INPUT_PULLUP);
   pinMode(downButtonPin, INPUT_PULLUP);
 
+  pinMode(batteryPin, INPUT);
+
   // pinMode(LdrPin, INPUT);
 
   //Optional: set Zigbee device name and model
-  zbShade.setManufacturerAndModel("DIY", "zbShade4");
+  zbShade.setManufacturerAndModel("DIY", "zbShade");
+
+  zbShade.setPowerSource(ZB_POWER_SOURCE_BATTERY, 100);
+
 
   // Set callback function for light change
   zbShade.on_shade_open(shadeOpen);
@@ -147,11 +174,16 @@ void setup() {
   Serial.println("Connecting to network..");
   while (!Zigbee.connected()) {
     Serial.print(".");
-    delay(100);
+    blink(1);
   }
+
+  // Turn off the LED
+  digitalWrite(LED_BUILTIN, HIGH);
+
   Serial.println();
   Serial.println("Connected to network");
   zbShade.on_connected();
+  measureAndReportBattery();
 }
 
 void loop() {
@@ -187,8 +219,14 @@ void loop() {
     }
   }
 
-  int lightValue = analogRead(LdrPin);  // Read analog value
-  Serial.printf("Light value: %d\n", lightValue);  // Print the value (0-4095 on ESP32)
+  // int lightValue = analogRead(LdrPin);  // Read analog value
+  // Serial.printf("Light value: %d\n", lightValue);  // Print the value (0-4095 on ESP32)
+
+  unsigned long currentMillis = millis();
+  if (currentMillis - lastReportTime >= reportInterval) {
+    measureAndReportBattery();
+    lastReportTime = currentMillis;
+  }
 
   delay(100);
 }
