@@ -36,10 +36,10 @@
 #define ZIGBEE_SHADE_ENDPOINT 10
 uint8_t led = LED_BUILTIN;
 uint8_t button = BOOT_PIN;
-const int forwardPin = D0;
-const int backwardPin = D1;
-const int upButtonPin = D6;
-const int downButtonPin = D5;
+const int forwardPin = D9;
+const int backwardPin = D10;
+const int upButtonPin = D7;
+const int downButtonPin = D8;
 const int LdrPin = D2;
 const int batteryPin = A0;
 
@@ -77,14 +77,17 @@ void shadeStop() {
 }
 
 void motorForward() {
+  Serial.println("Motor forward");
   digitalWrite(forwardPin, HIGH);
 }
 
 void motorBackward() {
+  Serial.println("Motor backward");
   digitalWrite(backwardPin, HIGH);
 }
 
 void motorStop() {
+  Serial.println("Motor stop");
   digitalWrite(forwardPin, LOW);
   digitalWrite(backwardPin, LOW);
 }
