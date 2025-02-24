@@ -46,7 +46,7 @@ const int batteryPin = A0;
 const int MS_PER_TILT_PERC_CHANGE = 100;
 
 // battery settings
-const unsigned long reportInterval = 10 * 1000;  // 1 * 60 * 60 * 1000; // 1 hour in milliseconds
+const unsigned long reportInterval = 1 * 60 * 60 * 1000; // 1 hour in milliseconds
 unsigned long lastReportTime = 0;
 uint8_t lastReportedBattery = 100;  // Store last reported battery percentage
 
@@ -63,17 +63,17 @@ void blink(int times) {
 }
 void shadeOpen() {
   Serial.println("Shade Open");
-  blink(2);
+  zbShade.set_tilt_perc(50);
 }
 
 void shadeClose() {
   Serial.println("Shade Close");
-  blink(2);
+  zbShade.set_tilt_perc(100);
 }
 
 void shadeStop() {
   Serial.println("Shade Stop");
-  blink(2);
+  motorStop();
 }
 
 void motorForward() {
@@ -209,16 +209,30 @@ void loop() {
   if (digitalRead(upButtonPin) == LOW) {  // Button is pressed
     Serial.println("Up button Pressed!");
     while (digitalRead(upButtonPin) == LOW) {
-      zbShade.set_tilt_perc(zbShade.get_tilt_perc() + 1);
+      int tilt_perc = zbShade.get_tilt_perc();
+
+      if (tilt_perc < 100) {
+        zbShade.set_tilt_perc(tilt_perc + 1);
+      }
+
+      motorForward();
       delay(MS_PER_TILT_PERC_CHANGE);
+      motorStop();
     }
   }
 
   if (digitalRead(downButtonPin) == LOW) {  // Button is pressed
     Serial.println("Down button Pressed!");
     while (digitalRead(downButtonPin) == LOW) {
-      zbShade.set_tilt_perc(zbShade.get_tilt_perc() - 1);
+      int tilt_perc = zbShade.get_tilt_perc();
+
+      if (tilt_perc > 0) {
+        zbShade.set_tilt_perc(tilt_perc - 1);
+      }
+
+      motorBackward();
       delay(MS_PER_TILT_PERC_CHANGE);
+      motorStop();
     }
   }
 

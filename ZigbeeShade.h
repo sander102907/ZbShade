@@ -107,6 +107,7 @@ public:
 
   void set_state(shade_state state);
   void set_tilt_perc(uint16_t tilt_perc);
+  void calibrate_tilt_perc(uint16_t tilt_perc);
 
   uint16_t get_tilt_perc() {
     return _current_tilt_perc;

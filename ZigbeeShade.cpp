@@ -189,6 +189,12 @@ void ZigbeeShade::set_tilt_perc(uint16_t tilt_perc) {
   tilt_changed(tilt_perc);
 }
 
+void ZigbeeShade::calibrate_tilt_perc(uint16_t tilt_perc) {
+  _current_tilt_perc = tilt_perc;
+  report_tilt_perc();
+  save_tilt_perc();
+}
+
 void ZigbeeShade::report_tilt_perc() {
   Serial.printf("Reporting tilt percentage: %u\n", _current_tilt_perc);
   esp_zb_lock_acquire(portMAX_DELAY);
