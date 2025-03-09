@@ -112,7 +112,7 @@ void ZigbeeShade::zbAttributeSet(const esp_zb_zcl_set_attr_value_message_t *mess
 void ZigbeeShade::tilt_changed(uint16_t new_tilt_perc) {
   new_tilt_perc = min(new_tilt_perc, static_cast<uint16_t>(100));
   new_tilt_perc = max(new_tilt_perc, static_cast<uint16_t>(0));
-  
+
   if (_motor_forward && _motor_backward && _motor_stop) {
     // Allocate memory for struct
     TiltChangeTaskParams *params = new TiltChangeTaskParams;
@@ -135,12 +135,56 @@ void ZigbeeShade::tilt_changed(uint16_t new_tilt_perc) {
   }
 }
 
+// void ZigbeeShade::tilt_changed_task(void *pvParameters) {
+//   TiltChangeTaskParams *params = (TiltChangeTaskParams *)pvParameters;
+//   ZigbeeShade *shadeInstance = params->instance;
+//   int16_t new_tilt_perc = params->new_tilt_perc;
+
+
+//   int16_t tilt_change_perc = new_tilt_perc - shadeInstance->_current_tilt_perc;
+
+//   if (tilt_change_perc > 0) {
+//     shadeInstance->_motor_forward();
+//   } else {
+//     shadeInstance->_motor_backward();
+//   }
+
+//   uint16_t starting_tilt_perc = shadeInstance->_current_tilt_perc;
+
+//   int duration_ms = abs(tilt_change_perc) * shadeInstance->msPerTiltPerc;  // Calculate motor run time
+
+//   unsigned long startTime = millis();  // Get start time in milliseconds
+
+//   while (millis() - startTime < duration_ms) {
+//     if (shadeInstance->_task_cancel) {
+//       shadeInstance->_task_cancel = false;
+//       shadeInstance->_motor_stop();
+//       _task_ref = NULL;
+//       vTaskDelete(NULL);
+//       return;
+//     }
+//     vTaskDelay(pdMS_TO_TICKS(10));
+//     shadeInstance->_current_tilt_perc = starting_tilt_perc + int((millis() - startTime) / shadeInstance->msPerTiltPerc) * (tilt_change_perc > 0 ? 1 : -1);
+//   }
+
+//   shadeInstance->_motor_stop();
+//   shadeInstance->_current_tilt_perc = new_tilt_perc;
+//   shadeInstance->report_tilt_perc();
+//   shadeInstance->save_tilt_perc();
+
+//   // Free memory allocated for the struct
+//   delete params;
+
+//   _task_ref = NULL;
+//   vTaskDelete(NULL);
+// }
+
 void ZigbeeShade::tilt_changed_task(void *pvParameters) {
   TiltChangeTaskParams *params = (TiltChangeTaskParams *)pvParameters;
   ZigbeeShade *shadeInstance = params->instance;
-  int16_t new_tilt_perc = params->new_tilt_perc;
+  int new_tilt_perc = params->new_tilt_perc;
 
-  int16_t tilt_change_perc = new_tilt_perc - shadeInstance->_current_tilt_perc;
+  int tilt_change_perc = new_tilt_perc - shadeInstance->_current_tilt_perc;
 
   if (tilt_change_perc > 0) {
     shadeInstance->_motor_forward();
@@ -148,13 +192,50 @@ void ZigbeeShade::tilt_changed_task(void *pvParameters) {
     shadeInstance->_motor_backward();
   }
 
-  uint16_t starting_tilt_perc = shadeInstance->_current_tilt_perc;
+  int starting_tilt_perc = shadeInstance->_current_tilt_perc;
 
-  int duration_ms = abs(tilt_change_perc) * shadeInstance->msPerTiltPerc;  // Calculate motor run time
+  int msPerTiltPerc = shadeInstance->msPerTiltPerc;
+  int duration_ms_init = 0;
+  int duration_ms = 0;
+  int tilt_change_initial = 0;
+  int tilt_change_final = 0;
+
+  Serial.printf("tilt_change_perc: %u, new_tilt_perc: %d\n", tilt_change_perc, new_tilt_perc);
+  if (tilt_change_perc > 0 && new_tilt_perc > 80) {
+    tilt_change_initial = min(80, new_tilt_perc) - starting_tilt_perc;
+    duration_ms_init = abs(tilt_change_initial) * msPerTiltPerc;
+
+    tilt_change_final = new_tilt_perc - max(80, starting_tilt_perc);
+    int msPerTiltPercFinal = int(msPerTiltPerc * shadeInstance->msMultFactorLast20ClosePerc);
+    duration_ms = duration_ms_init + abs(tilt_change_final) * msPerTiltPercFinal;
+  } else {
+    duration_ms_init = abs(tilt_change_perc) * msPerTiltPerc;
+    duration_ms = duration_ms_init;
+  }
 
   unsigned long startTime = millis();  // Get start time in milliseconds
 
-  while (millis() - startTime < duration_ms) {
+  while ((millis() - startTime < duration_ms)) {
+
+    int current_tilt_perc = starting_tilt_perc + int(min((millis() - startTime), (unsigned long)duration_ms_init) / shadeInstance->msPerTiltPerc) * (tilt_change_perc > 0 ? 1 : -1);
+    current_tilt_perc += max(0, int(((millis() - startTime) - duration_ms_init) / shadeInstance->msMultFactorLast20ClosePerc) * (tilt_change_perc > 0 ? 1 : -1));
+
+    Serial.printf("current_tilt_perc: %d\n", current_tilt_perc);
+
+    shadeInstance->_current_tilt_perc = current_tilt_perc;
+
+
+
+    // if (millis() - startTime < duration_ms_initial) {
+    //     currentTiltChange = int((millis() - startTime) / msPerTiltPerc);
+    // } else {
+    //     currentTiltChange = tilt_change_initial +
+    //                         int((millis() - startTime - duration_ms_initial) /
+    //                             (shadeInstance->msPerTiltPerc * shadeInstance->msMultFactorLast20ClosePerc));
+    // }
+
+    // shadeInstance->_current_tilt_perc = starting_tilt_perc + (currentTiltChange * (tilt_change_perc > 0 ? 1 : -1));
+
     if (shadeInstance->_task_cancel) {
       shadeInstance->_task_cancel = false;
       shadeInstance->_motor_stop();
@@ -163,7 +244,6 @@ void ZigbeeShade::tilt_changed_task(void *pvParameters) {
       return;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
-    shadeInstance->_current_tilt_perc = starting_tilt_perc + int((millis() - startTime) / shadeInstance->msPerTiltPerc) * (tilt_change_perc > 0 ? 1 : -1);
   }
 
   shadeInstance->_motor_stop();
@@ -171,12 +251,11 @@ void ZigbeeShade::tilt_changed_task(void *pvParameters) {
   shadeInstance->report_tilt_perc();
   shadeInstance->save_tilt_perc();
 
-  // Free memory allocated for the struct
   delete params;
-
   _task_ref = NULL;
   vTaskDelete(NULL);
 }
+
 
 void ZigbeeShade::clear_task() {
   if (_task_ref != NULL) {

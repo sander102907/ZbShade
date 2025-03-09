@@ -71,6 +71,10 @@ public:
   ~ZigbeeShade() {}
 
   int msPerTiltPerc;
+  // What multiplication factor to use for the last 20 percentage till closed
+  // As, getting closer to closing the blinds, takes more motor power and thus is slower,
+  // so more time is needed.
+  float msMultFactorLast20ClosePerc;
 
   void on_connected();
 

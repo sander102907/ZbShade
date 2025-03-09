@@ -31,6 +31,7 @@
 #endif
 
 #include <ZigbeeShade.h>
+// #include "esp_pm.h"
 
 /* Zigbee shade configuration */
 #define ZIGBEE_SHADE_ENDPOINT 10
@@ -44,9 +45,10 @@ const int LdrPin = D2;
 const int batteryPin = A0;
 
 const int MS_PER_TILT_PERC_CHANGE = 100;
+const float MS_MULT_FACTOR_LAST_20_CLOSE_PERC = 1.5;
 
 // battery settings
-const unsigned long reportInterval = 1 * 60 * 60 * 1000; // 1 hour in milliseconds
+const unsigned long reportInterval = 1 * 60 * 60 * 1000;  // 1 hour in milliseconds
 unsigned long lastReportTime = 0;
 uint8_t lastReportedBattery = 100;  // Store last reported battery percentage
 
@@ -161,6 +163,7 @@ void setup() {
   zbShade.motor_stop(motorStop);
 
   zbShade.msPerTiltPerc = MS_PER_TILT_PERC_CHANGE;
+  zbShade.msMultFactorLast20ClosePerc = MS_MULT_FACTOR_LAST_20_CLOSE_PERC;
 
   //Add endpoint to Zigbee Core
   Serial.println("Adding ZbShade endpoint to Zigbee Core");
@@ -187,6 +190,15 @@ void setup() {
   Serial.println("Connected to network");
   zbShade.on_connected();
   measureAndReportBattery();
+
+  // int cur_cpu_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
+  // esp_pm_config_esp32_t cfg = {
+  //   .max_freq_mhz = cur_cpu_freq_mhz,
+  //   .min_freq_mhz = cur_cpu_freq_mhz,
+  //   .light_sleep_enable = true
+  // };
+  // // Serial.flush();
+  // esp_pm_configure(&cfg);
 }
 
 void loop() {
